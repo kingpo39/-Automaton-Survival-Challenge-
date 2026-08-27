@@ -74,7 +74,7 @@ export function loadPlatformConfig(): PlatformConfig {
     openrouter: {
       apiKey: env('OPENROUTER_API_KEY'),
       baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: 'openrouter/auto',
       maxTokens: 4096,
       rateLimit: { requests: 200, windowMs: 86400000 },
     },
