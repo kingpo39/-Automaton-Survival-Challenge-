@@ -34,6 +34,7 @@ export interface PlatformConfig {
   huggingface: ProviderConfig
   deepseek: ProviderConfig
   gemini: ProviderConfig
+  openrouter: ProviderConfig
 }
 
 function env(key: string, fallback = ''): string {
@@ -69,6 +70,13 @@ export function loadPlatformConfig(): PlatformConfig {
       model: 'gemini-2.0-flash',
       maxTokens: 4096,
       rateLimit: { requests: 1500, windowMs: 86400000 },
+    },
+    openrouter: {
+      apiKey: env('OPENROUTER_API_KEY'),
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      maxTokens: 4096,
+      rateLimit: { requests: 200, windowMs: 86400000 },
     },
   }
 }
