@@ -1,12 +1,12 @@
 /**
- * OpenRouter Provider — Aggregator with 417+ models
- * Uses OpenAI-compatible API at openrouter.ai
+ * GitHub Models Provider — Free inference via GitHub token
+ * Free tier: 150 req/day, models like gpt-4.1, Llama 3.3, etc.
  */
 
 import type { ProviderConfig } from '../platform-config.js'
 import type { InferenceResult } from './groq.js'
 
-export async function callOpenRouter(
+export async function callGitHub(
   prompt: string,
   config: ProviderConfig,
   options?: { maxTokens?: number; systemPrompt?: string }
@@ -19,14 +19,11 @@ export async function callOpenRouter(
   }
   messages.push({ role: 'user', content: prompt })
 
-  const url = config.baseUrl.replace(/\/+$/, '') + '/chat/completions'
-
-  const response = await fetch(url, {
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + config.apiKey,
-      'HTTP-Referer': 'https://github.com/kingpo39/-Automaton-Survival-Challenge-',
+      'Authorization': `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
       model: config.model,
@@ -39,23 +36,17 @@ export async function callOpenRouter(
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')
-    throw new Error('OpenRouter ' + response.status + ': ' + body.slice(0, 200))
+    throw new Error(`GitHub Models ${response.status}: ${body.slice(0, 200)}`)
   }
 
   const data = await response.json() as {
-    choices: Array<{ message: { content: string | null }; finish_reason: string }>
+    choices: Array<{ message: { content: string } }>
     usage: { total_tokens: number }
   }
 
-  // Some models return content in reasoning instead of content field
-  const choice = data.choices[0]
-  const content = choice?.message?.content
-    || (choice as any)?.message?.reasoning
-    || ''
-
   return {
-    text: content,
-    provider: 'openrouter',
+    text: data.choices[0]?.message?.content ?? '',
+    provider: 'github',
     model: config.model,
     tokensUsed: data.usage?.total_tokens ?? 0,
     latencyMs: Date.now() - start,

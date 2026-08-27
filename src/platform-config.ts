@@ -35,6 +35,7 @@ export interface PlatformConfig {
   deepseek: ProviderConfig
   gemini: ProviderConfig
   openrouter: ProviderConfig
+  github: ProviderConfig
 }
 
 function env(key: string, fallback = ''): string {
@@ -77,6 +78,13 @@ export function loadPlatformConfig(): PlatformConfig {
       model: 'openrouter/auto',
       maxTokens: 4096,
       rateLimit: { requests: 200, windowMs: 86400000 },
+    },
+    github: {
+      apiKey: env('GITHUB_TOKEN'),
+      baseUrl: 'https://models.inference.ai.azure.com',
+      model: 'gpt-4.1',
+      maxTokens: 4096,
+      rateLimit: { requests: 150, windowMs: 86400000 },
     },
   }
 }

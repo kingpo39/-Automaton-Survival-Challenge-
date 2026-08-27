@@ -13,8 +13,9 @@ import { callHuggingFace } from './huggingface.js'
 import { callDeepseek } from './deepseek.js'
 import { callGemini } from './gemini.js'
 import { callOpenRouter } from './openrouter.js'
+import { callGitHub } from './github.js'
 
-export type ProviderName = 'groq' | 'huggingface' | 'deepseek' | 'gemini' | 'openrouter'
+export type ProviderName = 'groq' | 'huggingface' | 'deepseek' | 'gemini' | 'openrouter' | 'github'
 
 // Provider call functions
 const PROVIDERS: Record<ProviderName, typeof callGroq> = {
@@ -23,10 +24,11 @@ const PROVIDERS: Record<ProviderName, typeof callGroq> = {
   deepseek: callDeepseek,
   gemini: callGemini,
   openrouter: callOpenRouter,
+  github: callGitHub,
 }
 
 // Default priority chain (fastest first)
-const DEFAULT_CHAIN: ProviderName[] = ['groq', 'openrouter', 'huggingface', 'deepseek', 'gemini']
+const DEFAULT_CHAIN: ProviderName[] = ['openrouter', 'groq', 'github', 'huggingface', 'deepseek', 'gemini']
 
 // Rate limit tracking per provider
 const rateLimits = new Map<ProviderName, { count: number; resetAt: number }>()
