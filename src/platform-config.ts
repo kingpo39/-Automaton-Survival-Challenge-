@@ -36,6 +36,7 @@ export interface PlatformConfig {
   gemini: ProviderConfig
   openrouter: ProviderConfig
   github: ProviderConfig
+  freeModel: ProviderConfig
 }
 
 function env(key: string, fallback = ''): string {
@@ -85,6 +86,13 @@ export function loadPlatformConfig(): PlatformConfig {
       model: 'gpt-4.1',
       maxTokens: 4096,
       rateLimit: { requests: 150, windowMs: 86400000 },
+    },
+    freeModel: {
+      apiKey: env("OPENROUTER_API_KEY"),
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "inclusionai/ling-3.0-flash-fin:free",
+      maxTokens: 4096,
+      rateLimit: { requests: 50, windowMs: 86400000 },
     },
   }
 }
