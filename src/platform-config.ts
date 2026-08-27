@@ -37,6 +37,7 @@ export interface PlatformConfig {
   openrouter: ProviderConfig
   github: ProviderConfig
   freeModel: ProviderConfig
+  googleGemma: ProviderConfig
 }
 
 function env(key: string, fallback = ''): string {
@@ -90,9 +91,16 @@ export function loadPlatformConfig(): PlatformConfig {
     freeModel: {
       apiKey: env("OPENROUTER_API_KEY"),
       baseUrl: "https://openrouter.ai/api/v1",
-      model: "inclusionai/ling-3.0-flash-fin:free",
+      model: "openrouter/auto",
       maxTokens: 4096,
-      rateLimit: { requests: 50, windowMs: 86400000 },
+      rateLimit: { requests: 200, windowMs: 86400000 },
+    },
+    googleGemma: {
+      apiKey: env("OPENROUTER_API_KEY"),
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "openrouter/auto",
+      maxTokens: 4096,
+      rateLimit: { requests: 200, windowMs: 86400000 },
     },
   }
 }
