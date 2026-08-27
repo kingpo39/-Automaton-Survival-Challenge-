@@ -1711,7 +1711,7 @@ async function run(): Promise<void> {
       })     : new LocalInferenceClient({
         openaiApiKey: config.openaiApiKey,
         anthropicApiKey: config.anthropicApiKey,
-        openaiBaseUrl: config.openaiBaseUrl,
+        openaiBaseUrl: config.openaiBaseUrl || (process.env.GROQ_API_KEY ? "https://api.groq.com/openai/v1" : undefined) || (process.env.GROQ_API_KEY ? "https://api.groq.com/openai/v1" : undefined),
         omniApiKey: config.omniApiKey,
         omniBaseUrl: config.omniBaseUrl,
         fallbackModel: config.fallbackModel,

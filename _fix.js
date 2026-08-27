@@ -1,0 +1,1 @@
+const fs=require('fs');let c=fs.readFileSync('src/conway/inference.ts','utf8');c=c.replace(/process\.env\.GROQ_API_KEY;/g,'process.env.GROQ_API_KEY ?? process.env.DEEPSEEK_API_KEY;');fs.writeFileSync('src/conway/inference.ts',c);console.log('done')

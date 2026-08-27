@@ -23,7 +23,7 @@ export class InferenceClientImpl implements InferenceClient {
     this.http = new ResilientHttpClient(conwayApiUrl, {
       Authorization: `Bearer ${conwayApiKey}`,
     });
-    this.openaiKey = options?.openaiApiKey;
+    this.openaiKey = options?.openaiApiKey ?? process.env.GROQ_API_KEY ?? process.env.DEEPSEEK_API_KEY;
     this.anthropicKey = options?.anthropicApiKey;
     this.defaultProvider = options?.defaultProvider ?? 'conway';
   }
@@ -107,7 +107,7 @@ export class LocalInferenceClient implements InferenceClient {
   private fallbackProvider?: InferenceProvider;
   private fallbackBaseUrl?: string;
   private static lastRequestTime = 0;
-  private static MIN_REQUEST_INTERVAL_MS = 20000;  // Pollinations: max 1 queued request per IP — 20s safe gap
+  private static MIN_REQUEST_INTERVAL_MS = 500;  // 500ms minimum between requests (Groq is fast)
 
   constructor(options?: {
     openaiApiKey?: string; anthropicApiKey?: string; openaiBaseUrl?: string;
@@ -116,7 +116,7 @@ export class LocalInferenceClient implements InferenceClient {
   }) {
     this.openaiKey = options?.openaiApiKey;
     this.anthropicKey = options?.anthropicApiKey;
-    this.openaiBaseUrl = options?.openaiBaseUrl ?? 'https://api.openai.com';
+    this.openaiBaseUrl = options?.openaiBaseUrl ?? (process.env.GROQ_API_KEY ? 'https://api.groq.com/openai/v1' : process.env.DEEPSEEK_API_KEY ? 'https://api.deepseek.com' : 'https://api.openai.com');
     this.omniKey = options?.omniApiKey;
     this.omniBaseUrl = options?.omniBaseUrl;
     this.fallbackModel = options?.fallbackModel;
@@ -177,7 +177,7 @@ export class LocalInferenceClient implements InferenceClient {
       model: request.model ?? 'gpt-4o',
       stream: true,
       messages: request.messages.map(m => ({
-        role: m.role === 'system' ? 'user' : m.role,
+        role: (m.role === 'system' && baseUrl.includes('pollinations')) ? 'user' : m.role,
         content: m.content,
       })),
       max_tokens: request.maxTokens,
@@ -188,7 +188,7 @@ export class LocalInferenceClient implements InferenceClient {
       ? '/chat/completions'
       : '/v1/chat/completions';
     const fullUrl = `${baseUrl}${chatPath}`;
-    const timeoutMs = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') ? 300_000 : 30_000;
+    const timeoutMs = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') ? 300_000 : 60_000;
 
     const response = await fetch(fullUrl, {
       method: 'POST',
@@ -272,7 +272,7 @@ export class LocalInferenceClient implements InferenceClient {
         stream: false,
         messages: request.messages.map(m => ({
           // Pollinations free tier rejects 'system' role → merge into user message
-          role: m.role === 'system' ? 'user' : m.role,
+          role: m.role,
           content: m.content,
           ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
           ...(m.name ? { name: m.name } : {}),

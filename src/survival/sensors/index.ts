@@ -51,7 +51,7 @@ export class SensorLayer {
   constructor(
     private readonly db: AutomatonDatabase,
     private readonly conwayApiUrl: string,
-    private readonly ollamaUrl: string = 'http://localhost:11434',
+    private readonly inferenceUrl: string = (process.env.GROQ_API_KEY ? 'https://api.groq.com/openai/v1' : process.env.DEEPSEEK_API_KEY ? 'https://api.deepseek.com' : 'http://localhost:11434'),
   ) {}
 
   /**
@@ -155,11 +155,11 @@ export class SensorLayer {
     let responseMs = 0
 
     try {
-      // Simple health check: GET /api/tags
+      // Simple health check: GET /models
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 2000) // 2s timeout
 
-      const response = await fetch(`${this.ollamaUrl}/api/tags`, {
+      const response = await fetch(`${this.inferenceUrl}/api/tags`, {
         signal: controller.signal,
         method: 'GET',
       })

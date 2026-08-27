@@ -46,7 +46,7 @@ const log = createLogger('core:router')
 // ── Types ────────────────────────────────────────────────────────────────
 
 export type RouteDecision  = 'trivial' | 'normal' | 'complex'
-export type OfflineDecision = 'ollama_local' | 'skip'
+export type OfflineDecision = 'skip'
 
 // ── Task Class (matches RouteDecision but as enum for external use) ────────
 
@@ -178,8 +178,8 @@ export const OMNIROUTE_COMBOS: Record<RouteDecision, string> = {
   complex: 'auto/best-coding',                         // OmniRoute picks best available
 }
 
-export const OFFLINE_FALLBACK_MODEL = 'qwen2.5-coder:3b'   // local Ollama
-export const DEAD_STATE_FALLBACK     = 'gemma4:e2b'         // ultra-light offline fallback
+export const OFFLINE_FALLBACK_MODEL = 'skip'   // local Ollama
+export const DEAD_STATE_FALLBACK     = 'skip'         // ultra-light offline fallback
 
 // ── DeterministicRouter ──────────────────────────────────────────────────
 
@@ -259,7 +259,7 @@ export class DeterministicRouter {
       return {
         decision: 'complex',
         provider: ctx.isOnline ? OMNIROUTE_COMBOS.complex : OFFLINE_FALLBACK_MODEL,
-        offline: ctx.isOnline ? undefined : 'ollama_local',
+        offline: ctx.isOnline ? undefined : 'skip',
         reason: `${ctx.toolName} requires full reasoning — best available model`,
         skipInference: false,
       }
@@ -270,7 +270,7 @@ export class DeterministicRouter {
     return {
       decision: 'complex',
       provider: ctx.isOnline ? OMNIROUTE_COMBOS.complex : OFFLINE_FALLBACK_MODEL,
-      offline: ctx.isOnline ? undefined : 'ollama_local',
+      offline: ctx.isOnline ? undefined : 'skip',
       reason: 'unclassified request — defaulting to complex route',
       skipInference: false,
     }

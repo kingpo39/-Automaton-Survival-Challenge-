@@ -65,6 +65,14 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
   'huihui_ai/deepseek-r1-abliterated:1.5b': { name: 'huihui_ai/deepseek-r1-abliterated:1.5b', family: 'deepseek-r1', params: 1.5, contextLength: 64000, toolSupport: 'content', toolReliability: 0.3, description: 'Abliterated, weak tools' },
   'huihui_ai/qwen2.5-coder-abliterate:1.5b': { name: 'huihui_ai/qwen2.5-coder-abliterate:1.5b', family: 'qwen2.5-coder', params: 1.5, contextLength: 32768, toolSupport: 'content', toolReliability: 0.4, description: 'Abliterated coder, basic tools' },
   'qwen35-2b:latest':    { name: 'qwen35-2b:latest', family: 'qwen3.5', params: 1.9, contextLength: 32768, toolSupport: 'content', toolReliability: 0.35, description: 'Small, reasoning focus' },
+
+  // ── Groq cloud models (free tier, no local CPU needed) ──
+  'llama-3.3-70b-versatile': { name: 'llama-3.3-70b-versatile', family: 'llama3.3', params: 70, contextLength: 128000, toolSupport: 'native', toolReliability: 0.95, description: 'Groq cloud, 70B, excellent tools' },
+  'llama-3.1-8b-instant': { name: 'llama-3.1-8b-instant', family: 'llama3.1', params: 8, contextLength: 128000, toolSupport: 'native', toolReliability: 0.85, description: 'Groq cloud, 8B, fast' },
+  'qwen-qwq-32b': { name: 'qwen-qwq-32b', family: 'qwen3', params: 32, contextLength: 32768, toolSupport: 'native', toolReliability: 0.9, description: 'Groq cloud, reasoning + tools' },
+  'gemma2-9b-it': { name: 'gemma2-9b-it', family: 'gemma2', params: 9, contextLength: 8192, toolSupport: 'content', toolReliability: 0.7, description: 'Groq cloud, Google Gemma' },
+  'meta-llama/llama-4-scout-17b-16e-instruct': { name: 'meta-llama/llama-4-scout-17b-16e-instruct', family: 'llama4', params: 17, contextLength: 131072, toolSupport: 'native', toolReliability: 0.9, description: 'Groq cloud, Llama 4 Scout' },
+
 }
 
 // ── Ollama API types ─────────────────────────────────────────────────────────
