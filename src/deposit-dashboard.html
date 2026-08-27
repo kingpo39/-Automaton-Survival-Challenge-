@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧬 Survival Challenge — Live Deposits</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+  
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px 30px; border-bottom: 2px solid #0f3460; }
+  .header h1 { font-size: 1.4em; color: #00d2ff; }
+  .header .subtitle { color: #7a7a7a; font-size: 0.85em; margin-top: 4px; }
+  
+  .main { display: grid; grid-template-columns: 1fr 350px; gap: 0; min-height: calc(100vh - 80px); }
+  
+  .left { padding: 30px; }
+  .right { background: #111; border-left: 1px solid #222; padding: 20px; overflow-y: auto; }
+  
+  .status-bar { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
+  .stat { background: #151520; border: 1px solid #252535; border-radius: 8px; padding: 15px 20px; flex: 1; min-width: 140px; }
+  .stat .label { color: #666; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; }
+  .stat .value { font-size: 1.8em; font-weight: bold; margin-top: 4px; }
+  .stat .value.green { color: #00ff88; }
+  .stat .value.yellow { color: #ffcc00; }
+  .stat .value.red { color: #ff4444; }
+  .stat .value.blue { color: #00d2ff; }
+  
+  .tier-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
+  .tier-high { background: #00ff8822; color: #00ff88; border: 1px solid #00ff8844; }
+  .tier-normal { background: #ffcc0022; color: #ffcc00; border: 1px solid #ffcc0044; }
+  .tier-low_compute { background: #ff880022; color: #ff8800; border: 1px solid #ff880044; }
+  .tier-critical { background: #ff444422; color: #ff4444; border: 1px solid #ff444444; }
+  .tier-dead { background: #66666622; color: #666; border: 1px solid #66666644; }
+  
+  .section-title { color: #00d2ff; font-size: 0.85em; text-transform: uppercase; letter-spacing: 2px; margin: 25px 0 12px 0; border-bottom: 1px solid #222; padding-bottom: 6px; }
+  
+  .address-box { background: #151520; border: 1px solid #252535; border-radius: 6px; padding: 12px 16px; font-size: 0.8em; word-break: break-all; color: #aaa; display: flex; justify-content: space-between; align-items: center; }
+  .address-box a { color: #00d2ff; text-decoration: none; }
+  .address-box a:hover { text-decoration: underline; }
+  
+  .qr-container { text-align: center; margin: 15px 0; }
+  .qr-container canvas { border-radius: 8px; background: #fff; padding: 8px; }
+  
+  .events { max-height: 400px; overflow-y: auto; }
+  .event { padding: 10px 14px; border-left: 3px solid #333; margin-bottom: 8px; background: #151520; border-radius: 0 6px 6px 0; animation: fadeIn 0.3s ease; }
+  .event.deposit { border-left-color: #00ff88; }
+  .event.status { border-left-color: #00d2ff; }
+  .event.alert { border-left-color: #ff4444; }
+  .event .time { color: #555; font-size: 0.75em; }
+  .event .msg { margin-top: 3px; font-size: 0.85em; }
+  .event.deposit .msg { color: #00ff88; }
+  
+  .connection-status { display: flex; align-items: center; gap: 8px; font-size: 0.8em; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.connected { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+  .dot.polling { background: #00d2ff; box-shadow: 0 0 6px #00d2ff; animation: pulse 1.5s infinite; }
+  .dot.offline { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
+  
+  .streaming-cursor {
+    display: inline-block;
+    width: 6px;
+    height: 14px;
+    background: #ccf;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.7s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  
+  .chart { background: #151520; border: 1px solid #252535; border-radius: 8px; padding: 15px; margin-top: 15px; }
+  .chart canvas { width: 100%; height: 120px; }
+  
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  
+  @media (max-width: 768px) { .main { grid-template-columns: 1fr; } .right { border-left: none; border-top: 1px solid #222; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧬 Survival Challenge — Live Deposit Monitor</h1>
+  <div class="subtitle">Real-time USDC balance tracking on Base L2 • Direct blockchain polling</div>
+</div>
+
+<div class="main">
+  <div class="left">
+    <div class="status-bar">
+      <div class="stat">
+        <div class="label">USDC Balance</div>
+        <div class="value red" id="usdc">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">ETH (Gas)</div>
+        <div class="value blue" id="eth">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Survival Tier</div>
+        <div class="value" id="tier"><span class="tier-badge tier-dead">UNKNOWN</span></div>
+      </div>
+      <div class="stat">
+        <div class="label">Status</div>
+        <div class="connection-status">
+          <div class="dot offline" id="statusDot"></div>
+          <span id="statusText">Initializing...</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">📊 Balance History</div>
+    <div class="chart">
+      <canvas id="balanceChart" height="120"></canvas>
+    </div>
+
+    <div class="section-title">🧠 Public Opinion Momentum</div>
+    <div style="display: flex; gap: 15px; margin-bottom: 10px;">
+      <div class="stat" style="flex:1; min-width:0">
+        <div class="label">Momentum</div>
+        <div class="value blue" id="opinionMomentum" style="font-size:1.4em">—</div>
+      </div>
+      <div class="stat" style="flex:1; min-width:0">
+        <div class="label">Confidence</div>
+        <div class="value" id="opinionConfidence" style="font-size:1.4em; color:#888">—%</div>
+      </div>
+      <div class="stat" style="flex:1; min-width:0">
+        <div class="label">Volume</div>
+        <div class="value" id="opinionVolume" style="font-size:1.4em; color:#888">0</div>
+      </div>
+    </div>
+    <div class="chart">
+      <canvas id="opinionChart" height="100"></canvas>
+    </div>
+    <div id="opinionKeywords" style="font-size:0.75em; color:#888; margin-top:5px"></div>
+
+    <div class="section-title">💰 Deposit Events</div>
+    <div class="events" id="events">
+      <div class="event status"><div class="time">starting...</div><div class="msg">Initializing blockchain poller...</div></div>
+    </div>
+
+    <div class="section-title">💬 Chat with Agent</div>
+    <div id="chatMessages" style="max-height:250px; overflow-y:auto; border:1px solid #333; border-radius:8px; padding:8px; margin-bottom:8px; background:#111; font-size:0.85em;"></div>
+    <div style="display:flex; gap:6px;">
+      <input id="chatInput" type="text" placeholder="Type a message to the agent..." style="flex:1; padding:8px 12px; border:1px solid #333; border-radius:6px; background:#1a1a2e; color:#e0e0e0; font-size:0.9em; outline:none;" />
+      <button id="chatSend" onclick="sendChat()" style="padding:8px 16px; border:none; border-radius:6px; background:#4CAF50; color:white; cursor:pointer; font-weight:bold;">Send</button>
+    </div>
+    <div id="chatStatus" style="font-size:0.7em; color:#666; margin-top:4px;"></div>
+  </div>
+
+  <div class="right">
+    <div class="section-title">📱 Scan to Deposit</div>
+    <div class="address-box">
+      <span id="walletAddress">0x87716cE61c5Ff42e441B180Aa475fAD48Ca832ed</span>
+      <a id="explorerLink" href="https://basescan.org/address/0x87716cE61c5Ff42e441B180Aa475fAD48Ca832ed" target="_blank">Explorer ↗</a>
+    </div>
+    <div class="qr-container">
+      <canvas id="qrCanvas" width="200" height="200"></canvas>
+    </div>
+
+    <div class="section-title">📋 Survival Tiers</div>
+    <div style="font-size: 0.8em; line-height: 1.8;">
+      <div><span class="tier-badge tier-high">HIGH</span> &gt; $5.00 — Full inference, tools, spawning</div>
+      <div><span class="tier-badge tier-normal">NORMAL</span> &gt; $0.50 — Normal operation</div>
+      <div><span class="tier-badge tier-low_compute">LOW</span> &gt; $0.10 — Minimal inference</div>
+      <div><span class="tier-badge tier-critical">CRITICAL</span> &gt; $0.00 — Heartbeat only</div>
+      <div><span class="tier-badge tier-dead">DEAD</span> = $0.00 — Distress signal</div>
+    </div>
+
+    <div class="section-title">⏱️ Poll Stats</div>
+    <div style="font-size: 0.8em; color: #888; line-height: 2;">
+      <div>Polls: <span id="pollCount">0</span></div>
+      <div>Deposits: <span id="depositCount" style="color:#00ff88">0</span></div>
+      <div>Last check: <span id="lastCheck">--</span></div>
+      <div>Uptime: <span id="uptime">0s</span></div>
+      <div>RPC: <span id="rpcStatus" style="color:#ffcc00">connecting...</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────────────
+  const WALLET = '0x87716cE61c5Ff42e441B180Aa475fAD48Ca832ed';
+  const BARS = 60;
+
+  const $ = id => document.getElementById(id);
+  const balanceHistory = [];
+  const opinionHistory = [];  // {ts, momentum} objects over time
+  const OPINION_BARS = 288;  // 24h at 5-min intervals
+  let startTime = Date.now();
+  let depositCount = 0;
+  let pollCount = 0;
+
+  // ── QR Code (simple canvas-based) ──────────────────────────────────────
+  function drawQR(text, size) {
+    // Minimal QR-like visual — a placeholder that shows the address
+    // In production, use a QR library
+    const canvas = $('qrCanvas');
+    const ctx = canvas.getContext('2d');
+    const s = canvas.width;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, s, s);
+    
+    // Draw address as text-based QR placeholder
+    ctx.fillStyle = '#000';
+    ctx.font = '10px monospace';
+    const lines = [];
+    for (let i = 0; i < text.length; i += 20) lines.push(text.slice(i, i + 20));
+    
+    // Draw border pattern
+    const cell = 8;
+    const offset = 10;
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+      ctx.fillRect(offset + x * cell, offset + y * cell, cell, cell);
+      ctx.fillRect(offset + (16 + x) * cell, offset + y * cell, cell, cell);
+      ctx.fillRect(offset + x * cell, offset + (16 + y) * cell, cell, cell);
+    }
+    
+    // Fill center with hash pattern from address
+    for (let y = 4; y < 16; y++) {
+      for (let x = 4; x < 16; x++) {
+        const charCode = text.charCodeAt((y * 12 + x) % text.length);
+        if ((charCode + x + y) % 3 === 0) {
+          ctx.fillRect(offset + x * cell, offset + y * cell, cell, cell);
+        }
+      }
+    }
+
+    // Address text below
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(text.slice(0, 20), 4, s - 30);
+    ctx.fillText(text.slice(20), 4, s - 16);
+  }
+
+  // ── Chart ──────────────────────────────────────────────────────────────
+  function drawChart() {
+    const canvas = $('balanceChart');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 240;
+    ctx.clearRect(0, 0, w, h);
+
+    if (balanceHistory.length < 2) {
+      ctx.fillStyle = '#333';
+      ctx.font = '24px monospace';
+      ctx.fillText('Collecting data points...', w / 2 - 200, h / 2);
+      return;
+    }
+
+    const max = Math.max(...balanceHistory, 0.01) * 1.2;
+    const step = w / (BARS - 1);
+
+    // Grid
+    ctx.strokeStyle = '#1a1a2a';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = (h / 5) * i + 20;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // Line
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    for (let i = 0; i < balanceHistory.length; i++) {
+      const x = (BARS - balanceHistory.length + i) * step;
+      const y = h - 30 - (balanceHistory[i] / max) * (h - 60);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Fill
+    ctx.lineTo((BARS - 1) * step, h - 30);
+    ctx.lineTo((BARS - balanceHistory.length) * step, h - 30);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(0,255,136,0.15)');
+    grad.addColorStop(1, 'rgba(0,255,136,0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Labels
+    ctx.fillStyle = '#555';
+    ctx.font = '20px monospace';
+    ctx.fillText('$' + max.toFixed(2), 4, 35);
+    ctx.fillText('$0.00', 4, h - 10);
+  }  // ── Opinion Chart (24h history) ──────────────────────────────────────
+  async function loadOpinionHistory() {
+    try {
+      const r = await fetch('/opinion/history');
+      const d = await r.json();
+      if (d.history && d.history.length > 0) {
+        opinionHistory.length = 0;
+        for (const pt of d.history) {
+          opinionHistory.push({ ts: pt.ts, momentum: pt.momentum });
+        }
+        drawOpinionChart();
+      }
+    } catch {}
+  }
+
+  function drawOpinionChart() {
+    const canvas = $('opinionChart');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 200;
+    ctx.clearRect(0, 0, w, h);
+
+    if (opinionHistory.length < 2) {
+      ctx.fillStyle = '#333';
+      ctx.font = '18px monospace';
+      ctx.fillText('Collecting opinion data...', w / 2 - 180, h / 2);
+      return;
+    }
+
+    const step = w / (OPINION_BARS - 1);
+    const range = 1.0; // -1 to +1
+    const mid = h / 2;
+
+    // Zero line
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Positive zone fill
+    ctx.fillStyle = 'rgba(0,255,136,0.05)';
+    ctx.fillRect(0, 0, w, mid);
+
+    // Negative zone fill
+    ctx.fillStyle = 'rgba(255,68,68,0.05)';
+    ctx.fillRect(0, mid, w, mid);
+
+    // Line
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < opinionHistory.length; i++) {
+      const x = (OPINION_BARS - opinionHistory.length + i) * step;
+      const y = mid - (opinionHistory[i].momentum / range) * mid;
+      const color = opinionHistory[i].momentum > 0 ? '#00ff88' : opinionHistory[i].momentum < 0 ? '#ff4444' : '#888';
+      if (i === 0) { ctx.strokeStyle = color; ctx.moveTo(x, y); }
+      else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+
+    // Time labels (every 4 hours)
+    ctx.fillStyle = '#555';
+    ctx.font = '14px monospace';
+    if (opinionHistory.length >= 2) {
+      const firstTs = opinionHistory[0].ts;
+      const lastTs = opinionHistory[opinionHistory.length - 1].ts;
+      const totalSpan = lastTs - firstTs || 1;
+      for (let hr = 0; hr <= 24; hr += 4) {
+        const targetTs = firstTs + (hr / 24) * totalSpan;
+        // Find closest point
+        let closestIdx = 0;
+        let closestDist = Infinity;
+        for (let i = 0; i < opinionHistory.length; i++) {
+          const dist = Math.abs(opinionHistory[i].ts - targetTs);
+          if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+        }
+        const x = (OPINION_BARS - opinionHistory.length + closestIdx) * step;
+        const timeStr = new Date(opinionHistory[closestIdx].ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        ctx.fillText(timeStr, x - 20, h - 4);
+        // Tick mark
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, mid - 5); ctx.lineTo(x, mid + 5); ctx.stroke();
+      }
+    }
+
+    // Axis labels
+    ctx.fillStyle = '#555';
+    ctx.font = '14px monospace';
+    ctx.fillText('+1.0', 4, 18);
+    ctx.fillText(' 0.0', 4, mid + 5);
+    ctx.fillText('-1.0', 4, h - 20);
+
+    // Duration label
+    if (opinionHistory.length >= 2) {
+      const spanMs = opinionHistory[opinionHistory.length - 1].ts - opinionHistory[0].ts;
+      const spanH = Math.round(spanMs / 3600000);
+      ctx.fillStyle = '#444';
+      ctx.font = '12px monospace';
+      ctx.fillText(spanH > 0 ? spanH + 'h history' : 'warming up...', w - 120, 18);
+    }
+  }
+
+  // ── Events ─────────────────────────────────────────────────────────────
+  function addEvent(type, msg) {
+    const div = document.createElement('div');
+    div.className = 'event ' + type;
+    div.innerHTML = '<div class="time">' + new Date().toLocaleTimeString() + '</div><div class="msg">' + msg + '</div>';
+    const events = $('events');
+    events.insertBefore(div, events.firstChild);
+    if (events.children.length > 50) events.removeChild(events.lastChild);
+  }
+
+  // ── Tier ───────────────────────────────────────────────────────────────
+  function getTier(usdc) {
+    if (usdc >= 5) return 'high';
+    if (usdc >= 0.5) return 'normal';
+    if (usdc >= 0.1) return 'low_compute';
+    if (usdc > 0) return 'critical';
+    return 'dead';
+  }
+
+  function updateUI(usdc, eth) {
+    const tier = getTier(usdc);
+    $('usdc').textContent = '$' + usdc.toFixed(2);
+    $('usdc').className = 'value ' + (usdc >= 5 ? 'green' : usdc >= 0.5 ? 'yellow' : 'red');
+    $('eth').textContent = eth.toFixed(6);
+    $('tier').innerHTML = '<span class="tier-badge tier-' + tier + '">' + tier.toUpperCase() + '</span>';
+    $('lastCheck').textContent = new Date().toLocaleTimeString();
+    $('pollCount').textContent = pollCount;
+
+    balanceHistory.push(usdc);
+    if (balanceHistory.length > BARS) balanceHistory.shift();
+    drawChart();
+  }
+
+  // ── Uptime ─────────────────────────────────────────────────────────────
+  setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    $('uptime').textContent = h > 0 ? h + 'h ' + (m % 60) + 'm' : m > 0 ? m + 'm ' + (s % 60) + 's' : s + 's';
+  }, 1000);
+
+
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  drawQR(WALLET, 200);
+  addEvent('status', '🧬 Dashboard started — polling Base L2 directly');
+  addEvent('status', '📍 Wallet: ' + WALLET.slice(0, 10) + '...' + WALLET.slice(-6));
+
+  // Connect via WebSocket to dashboard server (no CORS issues)
+  function connectWS() {
+    try {
+      const ws = new WebSocket('ws://' + location.host + '/ws');
+      
+      ws.onopen = () => {
+        $('statusDot').className = 'dot connected';
+        $('statusText').textContent = 'Live — real-time via server';
+        $('rpcStatus').textContent = 'via server proxy';
+        $('rpcStatus').style.color = '#00ff88';
+        addEvent('status', '🔌 Connected to dashboard server — real-time mode');
+      };
+
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        
+        if (data.type === 'balance') {
+          updateUI(data.usdcCents / 100, data.ethWei / 1e18);
+          pollCount = data.pollCount || pollCount;
+        }
+
+        if (data.type === 'deposit') {
+          depositCount++;
+          $('depositCount').textContent = depositCount;
+          addEvent('deposit', '💰 +$' + (data.amount / 100).toFixed(2) + ' — New balance: $' + (data.newBalance / 100).toFixed(2));
+        }
+
+        if (data.type === 'status') {
+          addEvent('status', data.msg);
+        }
+
+        // ── Streaming chat tokens ──
+        if (data.type === 'chat_stream_start') {
+          // Create an empty assistant bubble for streaming
+          const div = document.createElement('div');
+          div.style.cssText = 'text-align:left; margin:4px 0;';
+          div.id = 'stream-' + data.id;
+          const bubble = document.createElement('div');
+          bubble.style.cssText = 'display:inline-block; background:#1a1a3e; color:#ccf; padding:6px 10px; border-radius:10px 10px 10px 2px; max-width:80%; word-wrap:break-word; min-height:1.2em;';
+          bubble.innerHTML = '<span class="streaming-cursor"></span>';
+          div.appendChild(bubble);
+          chatMsgs.appendChild(div);
+          chatMsgs.scrollTop = chatMsgs.scrollHeight;
+          chatStatus.textContent = 'Agent is typing...';
+        }
+
+        if (data.type === 'chat_stream_token') {
+          const container = document.getElementById('stream-' + data.id);
+          if (container) {
+            const bubble = container.querySelector('div');
+            if (bubble) {
+              // Remove cursor, append token, re-add cursor
+              const cursor = bubble.querySelector('.streaming-cursor');
+              if (cursor) cursor.remove();
+              bubble.textContent += data.token;
+              // Add blinking cursor back
+              const newCursor = document.createElement('span');
+              newCursor.className = 'streaming-cursor';
+              bubble.appendChild(newCursor);
+              chatMsgs.scrollTop = chatMsgs.scrollHeight;
+            }
+          }
+        }
+
+        if (data.type === 'chat_stream_done') {
+          const container = document.getElementById('stream-' + data.id);
+          if (container) {
+            const bubble = container.querySelector('div');
+            if (bubble) {
+              // Remove cursor, set final content
+              const cursor = bubble.querySelector('.streaming-cursor');
+              if (cursor) cursor.remove();
+              bubble.textContent = data.content;
+            }
+            container.removeAttribute('id'); // clean up
+          }
+          chatStatus.textContent = '';
+        }
+
+        // Research status indicator
+        if (data.type === 'research_status') {
+          if (data.status === 'searching') {
+            chatStatus.innerHTML = '<span style="color:#2196F3;">🔍 Researching...</span>';
+          } else if (data.status === 'done') {
+            chatStatus.innerHTML = '<span style="color:#4CAF50;">✓ Research complete</span>';
+            setTimeout(() => { chatStatus.textContent = ''; }, 3000);
+          }
+        }
+
+        if (data.type === 'chat') {
+          appendChat(data.role, data.content);
+          chatStatus.textContent = '';
+        }
+      };
+
+      ws.onclose = () => {
+        $('statusDot').className = 'dot offline';
+        $('statusText').textContent = 'Disconnected — reconnecting...';
+        addEvent('alert', 'Connection lost — retrying in 3s');
+        setTimeout(connectWS, 3000);
+      };
+
+      ws.onerror = () => ws.close();
+    } catch (e) {
+      $('statusDot').className = 'dot offline';
+      $('statusText').textContent = 'Cannot connect to server';
+      addEvent('alert', 'Failed to connect — run: npm run dashboard');
+    }
+  }
+
+  // ── Opinion Polling ────────────────────────────────────────────────
+  async function pollOpinion() {
+    try {
+      const r = await fetch('/opinion');
+      const d = await r.json();
+      if (d.momentum !== undefined) {
+        const mom = d.momentum;
+        const conf = d.confidence || 0;
+        const vol = d.volume || 0;
+
+        // Update stats
+        const momEl = $('opinionMomentum');
+        momEl.textContent = (mom >= 0 ? '+' : '') + mom.toFixed(3);
+        momEl.style.color = mom > 0.1 ? '#00ff88' : mom < -0.1 ? '#ff4444' : '#888';
+
+        const confEl = $('opinionConfidence');
+        confEl.textContent = Math.round(conf * 100) + '%';
+        confEl.style.color = conf > 0.5 ? '#00d2ff' : '#888';
+
+        const volEl = $('opinionVolume');
+        volEl.textContent = vol;
+        volEl.style.color = vol > 10 ? '#00ff88' : '#888';
+
+        // Update chart
+        opinionHistory.push({ ts: Date.now(), momentum: mom });
+        if (opinionHistory.length > OPINION_BARS) opinionHistory.shift();
+        drawOpinionChart();
+
+        // Update keywords
+        if (d.keywords && d.keywords.length > 0) {
+          const kwHtml = d.keywords.map(k => {
+            const icon = k.score > 0 ? '🟢' : k.score < 0 ? '🔴' : '⚪';
+            return icon + ' ' + k.word + ' (' + k.count + 'x)';
+          }).join('  ');
+          $('opinionKeywords').innerHTML = kwHtml;
+        }
+      }
+    } catch {}
+  }
+
+  loadOpinionHistory();  // fetch 24h history on page load
+  pollOpinion();
+  setInterval(pollOpinion, 30000); // every 30s
+
+  // ── Chat System ──────────────────────────────────────────────────────
+  const chatMsgs = $('chatMessages');
+  const chatInput = $('chatInput');
+  const chatStatus = $('chatStatus');
+  let lastChatTs = 0;
+
+  async function sendChat() {
+    const content = chatInput.value.trim();
+    if (!content) return;
+    chatInput.value = '';
+    appendChat('user', content);
+    chatStatus.textContent = 'Sending...';
+    try {
+      const r = await fetch('/chat/send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ content })
+      });
+      const d = await r.json();
+      if (d.ok) chatStatus.textContent = 'Agent is processing...';
+      else chatStatus.textContent = 'Failed: ' + (d.error || 'unknown');
+    } catch(e) {
+      chatStatus.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function appendChat(role, content) {
+    const div = document.createElement('div');
+    div.style.cssText = role === 'user'
+      ? 'text-align:right; margin:4px 0;'
+      : 'text-align:left; margin:4px 0;';
+    const bubble = document.createElement('div');
+    bubble.style.cssText = role === 'user'
+      ? 'display:inline-block; background:#2d5a27; color:#cfc; padding:6px 10px; border-radius:10px 10px 2px 10px; max-width:80%; word-wrap:break-word;'
+      : 'display:inline-block; background:#1a1a3e; color:#ccf; padding:6px 10px; border-radius:10px 10px 10px 2px; max-width:80%; word-wrap:break-word;';
+    bubble.textContent = content;
+    div.appendChild(bubble);
+    chatMsgs.appendChild(div);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  }
+
+  async function pollChat() {
+    try {
+      const r = await fetch('/chat/messages');
+      const d = await r.json();
+      if (!d.messages) return;
+      for (const m of d.messages) {
+        if (m.ts > lastChatTs) {
+          lastChatTs = m.ts;
+          if (m.role === 'assistant') {
+            appendChat('assistant', m.content);
+            chatStatus.textContent = '';
+          }
+        }
+      }
+    } catch {}
+  }
+
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  });
+
+  pollChat();
+  setInterval(pollChat, 5000);  // poll for responses every 5s
+
+  connectWS();
+</script>
+
+</body>
+</html>

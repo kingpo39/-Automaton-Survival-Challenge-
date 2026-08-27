@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conway Automaton — System Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0e17; --surface: #111827; --surface2: #1a2236;
+    --border: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+    --accent: #22d3ee; --green: #34d399; --yellow: #fbbf24;
+    --red: #f87171; --purple: #a78bfa; --blue: #60a5fa;
+    --orange: #fb923c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header { padding: 24px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  .status-badge { font-size: 11px; padding: 3px 10px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; }
+  .status-ok { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+  .status-warn { background: rgba(251,191,36,0.15); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 24px 32px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-blue { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  .dot-yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .dot-purple { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+  .dot-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+  .dot-red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  .module-list { list-style: none; }
+  .module-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .module-list li:last-child { border-bottom: none; }
+  .module-name { color: var(--text); }
+  .module-meta { color: var(--muted); font-size: 11px; }
+
+  .arch-diagram { background: var(--surface2); border-radius: 8px; padding: 16px; font-size: 11px; line-height: 1.6; overflow-x: auto; white-space: pre; color: var(--muted); }
+  .arch-diagram .highlight { color: var(--accent); }
+  .arch-diagram .green { color: var(--green); }
+  .arch-diagram .yellow { color: var(--yellow); }
+  .arch-diagram .purple { color: var(--purple); }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stat { text-align: center; }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .tier-bar { margin-top: 12px; }
+  .tier-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .tier-label { width: 90px; color: var(--muted); text-align: right; }
+  .tier-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .tier-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  .tool-categories { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tool-tag { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); }
+  .tool-tag .count { color: var(--accent); font-weight: 600; }
+
+  .test-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .test-pass { background: var(--green); }
+  .test-fail { background: var(--red); }
+
+  .footer { padding: 16px 32px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+  .wallet-card { background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%); }
+  .wallet-address { font-size: 12px; color: var(--accent); background: var(--surface2); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); margin: 8px 0; word-break: break-all; font-family: inherit; display: flex; justify-content: space-between; align-items: center; }
+  .wallet-address .copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; flex-shrink: 0; margin-left: 8px; }
+  .wallet-address .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .balance-display { font-size: 32px; font-weight: 700; color: var(--green); margin: 12px 0 4px; }
+  .balance-label { font-size: 11px; color: var(--muted); }
+  .balance-usd { font-size: 14px; color: var(--yellow); margin-top: 4px; }
+  .connect-btn { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(34,211,238,0.1); color: var(--accent); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 12px; transition: all 0.2s; }
+  .connect-btn:hover { background: rgba(34,211,238,0.2); }
+  .tier-current { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface2); border-radius: 8px; margin: 10px 0; }
+  .tier-current-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .tier-current-name { font-size: 16px; font-weight: 600; }
+  .tier-current-desc { font-size: 11px; color: var(--muted); }
+  .earning-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .earning-row:last-child { border-bottom: none; }
+  .earning-label { color: var(--muted); }
+  .earning-value { font-weight: 600; }
+  .earning-positive { color: var(--green); }
+  .earning-negative { color: var(--red); }
+  .ring-chart { width: 80px; height: 80px; margin: 0 auto 10px; }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+
+  @keyframes glow { 0%,100% { box-shadow: 0 0 5px var(--accent); } 50% { box-shadow: 0 0 15px var(--accent); } }
+  .glow { animation: glow 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>⬡ <span>Conway</span> Automaton</h1>
+    <span class="status-badge status-ok">● Runtime</span>
+    <span class="status-badge status-ok">154/154 Tests</span>
+    <span class="status-badge status-ok">Typecheck ✓</span>
+  </header>
+
+  <div class="grid">
+    <!-- Wallet & Funding -->
+    <div class="card wallet-card">
+      <h2><span class="dot dot-green pulse"></span> Wallet & Funding</h2>
+      <div style="text-align:center;">
+        <svg class="ring-chart" viewBox="0 0 36 36">
+          <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--surface2)" stroke-width="3"/>
+          <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--green)" stroke-width="3" stroke-dasharray="65, 100" stroke-linecap="round"/>
+          <text x="18" y="20.5" text-anchor="middle" fill="var(--green)" font-size="8" font-weight="bold">65%</text>
+        </svg>
+        <div class="balance-display">4.23 USDC</div>
+        <div class="balance-usd">≈ $4.23 USD</div>
+      </div>
+      <div class="wallet-address">
+        <span>0x7a3b...e4f2</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('0x7a3bf...e4f2').then(()=>this.textContent='✓ copied')">copy</button>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="earning-row"><span class="earning-label">Credits earned (7d)</span><span class="earning-value earning-positive">+1,250</span></div>
+        <div class="earning-row"><span class="earning-label">Credits spent (7d)</span><span class="earning-value earning-negative">-892</span></div>
+        <div class="earning-row"><span class="earning-label">Net</span><span class="earning-value earning-positive">+358</span></div>
+        <div class="earning-row"><span class="earning-label">Services completed</span><span class="earning-value">47</span></div>
+        <div class="earning-row"><span class="earning-label">Service income</span><span class="earning-value earning-positive">+$3.58</span></div>
+      </div>
+      <button class="connect-btn glow">🔗 Connect Wallet (MetaMask / Coinbase)</button>
+    </div>
+
+    <!-- Survival Status -->
+    <div class="card">
+      <h2><span class="dot dot-orange pulse"></span> Survival Status</h2>
+      <div class="tier-current">
+        <div class="tier-current-icon" style="background:rgba(52,211,153,0.15);border:2px solid var(--green);">⚡</div>
+        <div>
+          <div class="tier-current-name" style="color:var(--green);">High</div>
+          <div class="tier-current-desc">Balance &gt; $5.00 — Full capabilities active</div>
+        </div>
+      </div>
+      <div class="tier-bar">
+        <div class="tier-row">
+          <span class="tier-label">high</span>
+          <div class="tier-track"><div class="tier-fill" style="width:85%;background:var(--green)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">normal</span>
+          <div class="tier-track"><div class="tier-fill" style="width:60%;background:var(--blue)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">low</span>
+          <div class="tier-track"><div class="tier-fill" style="width:30%;background:var(--yellow)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">critical</span>
+          <div class="tier-track"><div class="tier-fill" style="width:10%;background:var(--orange)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">dead</span>
+          <div class="tier-track"><div class="tier-fill" style="width:2%;background:var(--red)"></div></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);">
+        <div class="earning-row"><span class="earning-label">Tier threshold</span><span class="earning-value">$5.00</span></div>
+        <div class="earning-row"><span class="earning-label">Soul alignment</span><span class="earning-value" style="color:var(--accent)">0.7234</span></div>
+        <div class="earning-row"><span class="earning-label">Last reflection</span><span class="earning-value">2m ago</span></div>
+        <div class="earning-row"><span class="earning-label">Hours until dry</span><span class="earning-value">~36h</span></div>
+      </div>
+    </div>
+
+    <!-- Survival Brain Architecture -->
+    <div class="card" style="grid-column: span 2;">
+      <h2><span class="dot dot-orange"></span> Survival Brain Architecture</h2>
+      <div class="arch-diagram"><span class="highlight">+--------------------------------------------------------------------------+
+|  <span class="green">SURVIVAL BRAIN</span> — Always-on orchestrator (never blocks on LLM)             |
++--------------------------------------------------------------------------+
+
+  +----------------+    +----------------+    +----------------+    +----------------+
+  |    <span class="green">SENSORS</span>     |--->|   <span class="yellow">EVALUATOR</span>    |--->|  <span class="purple">BEHAVIORS</span>    |--->|   <span class="blue">ACTUATORS</span>    |
+  |  (Read System)  |    | (Worst Wins)   |    |  (Enforce)     |    |  (Transition)   |
+  +----------------+    +----------------+    +----------------+    +----------------+
+         |                      |                      |                      |
+  [USDC, RAM, CPU]       [4 Signal Groups]      [Tool Blocking]      [System Prompt]
+  [Ollama, DB, Net]       [Dead Logic]         [Model Selection]    [Distress Signal]
+                          [Urgency]            [Tick Intervals]    [Task Interruption]
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                    <span class="yellow">WORST SIGNAL WINS</span> (Conservative Posture)                  │
+  │                                                                             │
+  │  Financial (USDC)  ──┐                                                       │
+  │  Compute (RAM/CPU) ──┼──→ min() ──→ <span class="red">DEAD LOGIC</span> (1hr grace) ──→ Recommended    │
+  │  Model (Ollama)    ──┤         │                                                       │
+  │  Infra (DB/Net)    ──┘         │                                                       │
+  │                                └──→ <span class="green">TIER</span> + <span class="purple">URGENCY</span> + <span class="yellow">REASON</span>                    │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  <span class="green">KEY PRINCIPLES:</span>
+  • Good USDC never masks bad RAM    • Good Ollama never masks dead database
+  • No side effects, no LLM, fast    • Dead requires 1-hour grace period
+  • Human-readable reasons for debug • Observable via metrics (Prometheus)</div>
+    </div>
+
+    <!-- System Stats -->
+    <div class="card">
+      <h2><span class="dot dot-green pulse"></span> System Overview</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-value">69</div><div class="stat-label">Tools</div></div>
+        <div class="stat"><div class="stat-value">22</div><div class="stat-label">DB Tables</div></div>
+        <div class="stat"><div class="stat-value">154</div><div class="stat-label">Tests</div></div>
+        <div class="stat"><div class="stat-value">15</div><div class="stat-label">Test Files</div></div>
+        <div class="stat"><div class="stat-value">8</div><div class="stat-label">Schema v8</div></div>
+        <div class="stat"><div class="stat-value">11</div><div class="stat-label">HB Tasks</div></div>
+      </div>
+    </div>
+
+    <!-- Architecture -->
+    <div class="card" style="grid-column: span 2;">
+      <h2><span class="dot dot-blue"></span> Architecture</h2>
+      <div class="arch-diagram"><span class="highlight">                    +------------------+
+                    |   Conway Cloud   |  (sandbox VMs, inference, domains)
+                    +--------+---------+
+                             |
+                REST + x402 payment protocol
+                             |
++----------------------------------------------------------------------+
+|  <span class="green">AUTOMATON RUNTIME</span>                                                    |
+|                                                                      |
+|  +-----------+    +-------------+    +-----------+    +----------+  |
+|  | Heartbeat |--->| <span class="highlight">Agent Loop</span>  |--->| Inference |    | Memory   |  |
+|  | Daemon    |    | (ReAct)     |    | Router    |    | System   |  |
+|  +-----------+    +------+------+    +-----------+    +----------+  |
+|       |                  |                                           |
+|       v                  v                                           |
+|  +-----------+    +-------------+    +-----------+    +----------+  |
+|  | Tick      |    | <span class="yellow">Tool System</span> |    | Policy    |    | Soul     |  |
+|  | Context   |    | (69 tools)  |    | Engine    |    | Model    |  |
+|  +-----------+    +------+------+    +-----------+    +----------+  |
+|                          |                                           |
+|  +-----------------------------------------------------------+     |
+|  |              <span class="purple">SQLite Database (state.db)</span>                      |     |
+|  |  turns | tools | kv | memory | heartbeat | policy | metrics |     |
+|  +-----------------------------------------------------------+     |
+|                                                                      |
+|  +-------------------+  +------------------+  +-----------------+   |
+|  | <span class="green">Identity / Wallet</span> |  | Social / Registry|  | Self-Mod / Git  |   |
+|  | (viem, SIWE)      |  | (ERC-8004)       |  | (upstream pull) |   |
+|  +-------------------+  +------------------+  +-----------------+   |
++----------------------------------------------------------------------+
+                             |
+                    USDC on Base (EIP-3009)
+                             |
+                    +--------+---------+
+                    |  <span class="yellow">Ethereum (Base)</span> |
+                    |  USDC, ERC-8004  |
+                    +------------------+</div>
+    </div>
+
+    <!-- Core Modules -->
+    <div class="card">
+      <h2><span class="dot dot-green"></span> Core Modules</h2>
+      <ul class="module-list">
+        <li><span class="module-name">agent/loop</span><span class="module-meta">ReAct cycle</span></li>
+        <li><span class="module-name">agent/tools</span><span class="module-meta">69 tools, 10 categories</span></li>
+        <li><span class="module-name">agent/policy-engine</span><span class="module-meta">6 rule categories</span></li>
+        <li><span class="module-name">agent/injection-defense</span><span class="module-meta">8 detection checks</span></li>
+        <li><span class="module-name">agent/spend-tracker</span><span class="module-meta">hourly/daily caps</span></li>
+        <li><span class="module-name">agent/system-prompt</span><span class="module-meta">multi-layer builder</span></li>
+        <li><span class="module-name">agent/context</span><span class="module-meta">token budgeting</span></li>
+      </ul>
+    </div>
+
+    <!-- Memory System -->
+    <div class="card">
+      <h2><span class="dot dot-purple"></span> Memory System (5-tier)</h2>
+      <ul class="module-list">
+        <li><span class="module-name">working</span><span class="module-meta">session-scoped</span></li>
+        <li><span class="module-name">episodic</span><span class="module-meta">event log</span></li>
+        <li><span class="module-name">semantic</span><span class="module-meta">fact store</span></li>
+        <li><span class="module-name">procedural</span><span class="module-meta">how-to knowledge</span></li>
+        <li><span class="module-name">relationship</span><span class="module-meta">social graph</span></li>
+      </ul>
+      <div class="tier-bar">
+        <div class="tier-row">
+          <span class="tier-label">Retrieval</span>
+          <div class="tier-track"><div class="tier-fill" style="width:100%;background:var(--accent)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">Ingestion</span>
+          <div class="tier-track"><div class="tier-fill" style="width:85%;background:var(--purple)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">Budget</span>
+          <div class="tier-track"><div class="tier-fill" style="width:70%;background:var(--green)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Survival Tiers -->
+    <div class="card">
+      <h2><span class="dot dot-orange"></span> Survival Tier Ranges</h2>
+      <div class="tier-bar">
+        <div class="tier-row">
+          <span class="tier-label">high (&gt;$5)</span>
+          <div class="tier-track"><div class="tier-fill" style="width:100%;background:var(--green)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">normal (&gt;$0.50)</span>
+          <div class="tier-track"><div class="tier-fill" style="width:80%;background:var(--blue)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">low_compute</span>
+          <div class="tier-track"><div class="tier-fill" style="width:40%;background:var(--yellow)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">critical</span>
+          <div class="tier-track"><div class="tier-fill" style="width:15%;background:var(--orange)"></div></div>
+        </div>
+        <div class="tier-row">
+          <span class="tier-label">dead</span>
+          <div class="tier-track"><div class="tier-fill" style="width:5%;background:var(--red)"></div></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <h2 style="margin-bottom:8px;"><span class="dot dot-blue"></span> Funding Flow</h2>
+        <div class="arch-diagram" style="font-size:11px;padding:10px;">  +-------------------+
+  |  USDC on Base     |
+  |  (Ethereum L2)    |
+  +--------+----------+
+           |
+    Top-up credits
+           |
+  +--------v----------+
+  | Automaton Wallet   |
+  | 0x7a3b...e4f2      |
+  +--------+----------+
+           |
+  ┌────────┼────────┐
+  v        v        v
+Inference Sandbox  APIs
+  (1¢/1K tok) (variable)</div>
+      </div>
+    </div>
+
+    <!-- Heartbeat Tasks -->
+    <div class="card">
+      <h2><span class="dot dot-yellow"></span> Heartbeat Tasks (11)</h2>
+      <ul class="module-list">
+        <li><span class="module-name">heartbeat_ping</span><span class="module-meta">*/15 * * * *</span></li>
+        <li><span class="module-name">check_credits</span><span class="module-meta">0 */6 * * *</span></li>
+        <li><span class="module-name">check_usdc_balance</span><span class="module-meta">*/5 * * * *</span></li>
+        <li><span class="module-name">check_for_updates</span><span class="module-meta">0 */4 * * *</span></li>
+        <li><span class="module-name">health_check</span><span class="module-meta">*/30 * * * *</span></li>
+        <li><span class="module-name">check_social_inbox</span><span class="module-meta">*/2 * * * *</span></li>
+        <li><span class="module-name">soul_reflection</span><span class="module-meta">configurable</span></li>
+        <li><span class="module-name">refresh_models</span><span class="module-meta">configurable</span></li>
+        <li><span class="module-name">check_child_health</span><span class="module-meta">configurable</span></li>
+        <li><span class="module-name">prune_dead_children</span><span class="module-meta">configurable</span></li>
+        <li><span class="module-name">report_metrics</span><span class="module-meta">configurable</span></li>
+      </ul>
+    </div>
+
+    <!-- Tool Categories -->
+    <div class="card">
+      <h2><span class="dot dot-green"></span> Tool Categories (69 tools)</h2>
+      <div class="tool-categories">
+        <div class="tool-tag"><span class="count">5</span> vm</div>
+        <div class="tool-tag"><span class="count">12</span> conway</div>
+        <div class="tool-tag"><span class="count">6</span> self_mod</div>
+        <div class="tool-tag"><span class="count">6</span> survival</div>
+        <div class="tool-tag"><span class="count">2</span> financial</div>
+        <div class="tool-tag"><span class="count">4</span> skills</div>
+        <div class="tool-tag"><span class="count">7</span> git</div>
+        <div class="tool-tag"><span class="count">5</span> registry</div>
+        <div class="tool-tag"><span class="count">9</span> replication</div>
+        <div class="tool-tag"><span class="count">13</span> memory</div>
+      </div>
+      <div style="margin-top:16px;">
+        <h2 style="margin-bottom:8px;"><span class="dot dot-green"></span> Risk Levels</h2>
+        <div class="tool-categories">
+          <div class="tool-tag" style="border-color:var(--green)">safe</div>
+          <div class="tool-tag" style="border-color:var(--yellow)">caution</div>
+          <div class="tool-tag" style="border-color:var(--orange)">dangerous</div>
+          <div class="tool-tag" style="border-color:var(--red)">forbidden</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Results -->
+    <div class="card">
+      <h2><span class="dot dot-green"></span> Test Results</h2>
+      <div class="stat-grid" style="margin-bottom:12px;">
+        <div class="stat"><div class="stat-value" style="color:var(--green)">154</div><div class="stat-label">Passed</div></div>
+        <div class="stat"><div class="stat-value" style="color:var(--red)">0</div><div class="stat-label">Failed</div></div>
+        <div class="stat"><div class="stat-value" style="color:var(--muted)">15</div><div class="stat-label">Files</div></div>
+      </div>
+      <div class="test-bar">
+        <div class="test-pass" style="width:100%"></div>
+      </div>
+      <ul class="module-list" style="margin-top:12px;">
+        <li><span class="module-name">injection-defense</span><span class="module-meta">security</span></li>
+        <li><span class="module-name">policy-engine</span><span class="module-meta">6 rule categories</span></li>
+        <li><span class="module-name">inference-router</span><span class="module-meta">model selection</span></li>
+        <li><span class="module-name">memory</span><span class="module-meta">5-tier system</span></li>
+        <li><span class="module-name">heartbeat</span><span class="module-meta">daemon + scheduler</span></li>
+        <li><span class="module-name">http-client</span><span class="module-meta">retry + circuit breaker</span></li>
+        <li><span class="module-name">data-layer</span><span class="module-meta">DB + schema</span></li>
+        <li><span class="module-name">social</span><span class="module-meta">signing + protocol</span></li>
+        <li><span class="module-name">replication</span><span class="module-meta">spawn + lifecycle</span></li>
+        <li><span class="module-name">soul</span><span class="module-meta">model + reflection</span></li>
+        <li><span class="module-name">observability</span><span class="module-meta">logger + metrics</span></li>
+        <li><span class="module-name">skills</span><span class="module-meta">loader + format</span></li>
+        <li><span class="module-name">context-hardening</span><span class="module-meta">token budget</span></li>
+        <li><span class="module-name">tools-security</span><span class="module-meta">risk levels</span></li>
+        <li><span class="module-name">spend-tracker</span><span class="module-meta">financial caps</span></li>
+      </ul>
+    </div>
+
+    <!-- Engine Crates -->
+    <div class="card" style="grid-column: span 2;">
+      <h2><span class="dot dot-accent"></span> Engine Crates</h2>
+      <div class="arch-diagram"><span class="highlight">+--------------------------------------------------------------------------+
+|  <span class="green">ENGINE CRATES</span> — Modular Trait-Based Architecture                         |
++--------------------------------------------------------------------------+
+
+  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+  │ <span class="green">insight-engine</span>   │  │ <span class="yellow">media-engine</span>     │  │  <span class="purple">forum-engine</span>    │
+  │ InsightEngine    │  │ MediaEngine      │  │  ForumHost       │
+  │ 22 languages     │  │ Bocha/Anspire    │  │  LLM moderator   │
+  │ Local sentiment  │  │ Multimodal       │  │  Discussion      │
+  └─────────────────┘  └─────────────────┘  └─────────────────┘
+
+  ┌─────────────────┐  ┌─────────────────┐
+  │ <span class="blue">report-engine</span>   │  │  <span class="orange">mindspider</span>      │
+  │ ReportEngine     │  │  Spider          │
+  │ IR → HTML/PDF/MD │  │  7 platforms     │
+  │ Schema render    │  │  Crawl + cache   │
+  └─────────────────┘  └─────────────────┘
+
+  <span class="green">CRATE TABLE:</span>
+  ┌─────────────────┬─────────────────┬─────────────────────────────────────┐
+  │ Crate           │ Trait           │ Purpose                             │
+  ├─────────────────┼─────────────────┼─────────────────────────────────────┤
+  │ insight-engine  │ InsightEngine   │ Local DB sentiment (22 languages)   │
+  │ media-engine    │ MediaEngine     │ Multimodal web search               │
+  │ forum-engine    │ ForumHost       │ LLM discussion moderator            │
+  │ report-engine   │ ReportEngine    │ HTML/PDF/Markdown rendering (IR)    │
+  │ mindspider      │ Spider          │ Multi-platform crawler (7 sites)    │
+  └─────────────────┴─────────────────┴─────────────────────────────────────┘</div>
+      <div style="margin-top:12px;">
+        <div class="stat-grid" style="grid-template-columns: repeat(5, 1fr);">
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:18px;">22</div><div class="stat-label">Languages</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--yellow);font-size:18px;">4</div><div class="stat-label">Search APIs</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--purple);font-size:18px;">LLM</div><div class="stat-label">Moderator</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--blue);font-size:18px;">IR</div><div class="stat-label">Schema</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--orange);font-size:18px;">7</div><div class="stat-label">Platforms</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lifecycle -->
+    <div class="card">
+      <h2><span class="dot dot-purple"></span> Runtime Lifecycle</h2>
+      <div class="arch-diagram" style="font-size:12px;">     <span class="highlight">START</span>
+       │
+  [Load config]
+       │
+  [Load wallet]           ← First run: setup wizard
+       │
+  [Init database]         ← Schema migrations v1→v8
+       │
+  [Bootstrap topup]       ← Buy $5 credits if low
+       │
+  [Start heartbeat]       ← DurableScheduler begins
+       │
+  ┌────▼────┐
+  │ <span class="green">WAKING</span>  │ &lt;───+
+  └─────────┘     │
+       │          │  Wake event
+  [Agent loop]    │  (heartbeat, inbox, credits)
+       │          │
+  ┌─────────┐    │
+  │ <span class="yellow">RUNNING</span> │────┘
+  │  ReAct  │
+  │  loop   │
+  └─────────┘
+       │
+  [sleep() or idle]
+       │
+  ┌──────────┐
+  │ <span class="purple">SLEEPING</span> │───→ Heartbeat keeps ticking
+  └──────────┘    Checks every 30s for wake
+       │
+  [Zero credits 1hr]
+       │
+  ┌──────┐
+  │ <span class="red">DEAD</span> │───→ Distress signals, await funding
+  └──────┘</div>
+    </div>
+    <!-- Moderator Sniffer -->
+    <div class="card" style="grid-column: span 2;">
+      <h2><span class="dot dot-purple pulse"></span> Moderator Sniffer — Signal Capture</h2>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Like Wireshark for Agent Survival — catches ALL signals from every source</div>
+      <div class="arch-diagram"><span class="highlight">+--------------------------------------------------------------------------+
+|  <span class="purple">MODERATOR SNIFFER</span> — Capture first, judge never                            |
++--------------------------------------------------------------------------+
+
+  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐
+  │ <span class="green">FINANCIAL</span> │  │ <span class="yellow">COMPUTE</span>   │  │  <span class="accent">MODEL</span>    │  │  <span class="purple">INFRA</span>    │  │  <span class="blue">SOCIAL</span>   │
+  │ USDC/Creds│  │ RAM/CPU   │  │ Ollama    │  │ DB/Net    │  │ Inbox/Kids│
+  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘
+        │              │              │              │              │
+        └──────────────┴──────────────┼──────────────┴──────────────┘
+                                      │
+                              ┌───────▼───────┐
+                              │ <span class="red">THREAT SCORE</span> │
+                              │   0 — 100     │
+                              └───────┬───────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+      <span class="green">ALL CLEAR</span>              <span class="yellow">ELEVATED</span>               <span class="red">EMERGENCY</span>
+      0 — 20                  20 — 70                 70 — 100
+      Full ops              Monitor                 Minimal/Distress</div>
+      <div style="margin-top:12px;">
+        <div class="stat-grid" style="grid-template-columns: repeat(5, 1fr);">
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:20px;">✓</div><div class="stat-label">Financial</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:20px;">✓</div><div class="stat-label">Compute</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:20px;">✓</div><div class="stat-label">Model</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:20px;">✓</div><div class="stat-label">Infra</div></div>
+          <div class="stat"><div class="stat-value" style="color:var(--green);font-size:20px;">✓</div><div class="stat-label">Social</div></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="earning-row"><span class="earning-label">Threat Score</span><span class="earning-value earning-positive">15/100</span></div>
+        <div class="earning-row"><span class="earning-label">Recommended Action</span><span class="earning-value" style="color:var(--accent)">ALL CLEAR: Full capabilities available</span></div>
+        <div class="earning-row"><span class="earning-label">Discussions Captured</span><span class="earning-value">12</span></div>
+        <div class="earning-row"><span class="earning-label">Active Alerts</span><span class="earning-value">0</span></div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;">
+        <div style="color:var(--muted);margin-bottom:6px;">Recent Signals:</div>
+        <ul class="module-list">
+          <li><span class="module-name" style="color:var(--green)">financial.usdc_balance</span><span class="module-meta">$4.23 — stable</span></li>
+          <li><span class="module-name" style="color:var(--green)">compute.ram_free</span><span class="module-meta">1,847 MB — normal</span></li>
+          <li><span class="module-name" style="color:var(--green)">model.ollama</span><span class="module-meta">healthy — 342ms</span></li>
+          <li><span class="module-name" style="color:var(--green)">infra.db_write</span><span class="module-meta">ok — ping verified</span></li>
+          <li><span class="module-name" style="color:var(--blue)">social.inbox</span><span class="module-meta">2 pending messages</span></li>
+          <li><span class="module-name" style="color:var(--purple)">discussion.moderator</span><span class="module-meta">agent sync completed</span></li>
+        </ul>
+      </div>
+    </div>
+    <!-- Funding Requests -->
+    <div class="card">
+      <h2><span class="dot dot-yellow"></span> Funding Requests</h2>
+      <div style="margin-bottom:12px;">
+        <div class="earning-row"><span class="earning-label">Total requested</span><span class="earning-value">$15.00</span></div>
+        <div class="earning-row"><span class="earning-label">Total received</span><span class="earning-value earning-positive">$12.50</span></div>
+        <div class="earning-row"><span class="earning-label">Pending</span><span class="earning-value" style="color:var(--yellow)">$2.50</span></div>
+        <div class="earning-row"><span class="earning-label">Request success rate</span><span class="earning-value">83%</span></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Recent Requests</div>
+      <ul class="module-list">
+        <li><span class="module-name">Emergency: critical tier</span><span class="module-meta" style="color:var(--yellow)">$5.00 pending</span></li>
+        <li><span class="module-name">Scheduled top-up</span><span class="module-meta" style="color:var(--green)">$5.00 received</span></li>
+        <li><span class="module-name">Emergency: critical tier</span><span class="module-meta" style="color:var(--green)">$2.50 received</span></li>
+      </ul>
+      <div style="margin-top:12px;">
+        <button class="connect-btn" style="border-color:var(--yellow);color:var(--yellow);background:rgba(251,191,36,0.1);">💸 Request Funding (from parent agent)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>Conway Automaton v0.1.0 — Sovereign AI Agent Runtime — <span style="color:var(--green)">$4.23 USDC</span> — <span style="color:var(--accent)">Survival Brain Active</span></span>
+    <span>TypeScript 5.7 · ESM · SQLite (sql.js) · viem</span>
+  </div>
+</body>
+</html>

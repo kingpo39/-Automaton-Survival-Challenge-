@@ -1,0 +1,98 @@
+powershell  curl.exe --socks5-hostname 127.0.0.1:9050 https://api.ipify.org
+
+
+
+python
+
+import requests
+
+proxies = {
+    "http": "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050",
+}
+
+for url in [
+    "https://www.kimi.com/plugins",
+    "https://icanhazip.com/",
+    "https://check.torproject.org/api/ip",
+]:
+    print("\nTesting:", url)
+    try:
+        r = requests.get(
+            url,
+            proxies=proxies,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        print("Status:", r.status_code)
+        print("Response:", r.text[:200])
+    except Exception as e:
+        print("Error:", e)
+
+
+for running tor 
+
+tor_proxies = {
+    "http": "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050",
+}
+
+requests.get(
+    url,
+    proxies=tor_proxies,
+    timeout=30
+)
+
+
+windows test Test-NetConnection 127.0.0.1 -Port 9050
+
+HOW ITS WORK
+
+1. Tor service (WSL)
+
+If you enabled it:
+
+sudo systemctl enable tor@default
+
+then Tor starts automatically when WSL starts.
+
+Check:
+
+sudo systemctl is-enabled tor@default
+
+Should return:
+
+enabled
+2. Windows port forwarding
+
+Your current rule:
+
+127.0.0.1:9050  ->  172.21.142.4:9050
+
+is persistent, but the WSL IP can change after reboot. If it changes, the portproxy breaks.
+
+A more stable setup is to make WSL Tor listen through localhost automatically or create a startup script that updates the portproxy.
+
+Normal internet
+
+No proxy activation needed.
+
+Example:
+
+requests.get("https://api.github.com")
+
+uses your normal ISP connection.
+
+Tor connection
+
+Only applications that explicitly use:
+
+proxies = {
+    "http": "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050",
+}
+
+go through Tor.
+
+Everything else stays normal.
+

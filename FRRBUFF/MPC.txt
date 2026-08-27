@@ -1,0 +1,30 @@
+PS C:\Users\soley> claude mcp list
+context7: npx -y @upstash/context7-mcp - ✔ Connected
+playwright: npx -y @playwright/mcp@latest - ✔ Connected
+filesystem: npx -y @modelcontextprotocol/server-filesystem
+C:\Users\soley\Documents - ✔ Connected
+github: https://api.githubcopilot.com/mcp (HTTP) - ! Needs authentication
+PS C:\Users\soley> claude mcp add context7 -- cmd /c npx -y @upstash/context7-mcp
+MCP server context7 already exists in local config
+PS C:\Users\soley> claude mcp add filesystem -- cmd /c npx -y @modelcontextprotocol/server-filesystem "C:\Users\soley\Documents"
+MCP server filesystem already exists in local config
+PS C:\Users\soley> claude mcp add playwright -- cmd /c npx -y @playwright/mcp@latest
+MCP server playwright already exists in local config
+PS C:\Users\soley> claude mcp list
+context7: npx -y @upstash/context7-mcp - ✔ Connected
+playwright: npx -y @playwright/mcp@latest - ✔ Connected
+filesystem: npx -y @modelcontextprotocol/server-filesystem
+C:\Users\soley\Documents - ✔ Connected
+github: https://api.githubcopilot.com/mcp (HTTP) - ! Needs authentication
+PS C:\Users\soley> node --version
+v26.5.0
+PS C:\Users\soley> npx --version
+11.17.0
+PS C:\Users\soley>
+PS C:\Users\soley> cmd /c npx -y @playwright/mcp@latest
+
+
+
+PS C:\Users\soley> npx -y @modelcontextprotocol/server-memory
+Knowledge Graph MCP Server running on stdio
+

@@ -1,0 +1,373 @@
+"""
+TradingAI Server Fix & Start — One script, no downloads needed.
+Run: python fix_and_start.py
+"""
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+PROJECT_DIR = r"C:\TradingAI\TradingAI\freqtrade"
+API_DIR = os.path.join(PROJECT_DIR, "core", "api")
+SERVER_FILE = os.path.join(API_DIR, "server.py")
+BACKUP_FILE = os.path.join(API_DIR, "server.py.old")
+AUTH_FILE = os.path.join(API_DIR, "auth.py")
+
+# =============================================================================
+# 1. AUTH.PY — JWT module
+# =============================================================================
+AUTH_PY = '''"""API Authentication — JWT token creation and validation."""
+from __future__ import annotations
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
+
+from fastapi import HTTPException, WebSocket, status
+from fastapi.security import HTTPBearer
+
+try:
+    import jwt
+except ImportError:
+    jwt = None  # type: ignore
+
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "tradingai-dev-secret-change-in-production")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+security_bearer = HTTPBearer(auto_error=False)
+
+
+class AuthError(HTTPException):
+    def __init__(self, detail: str = "Authentication failed"):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
+
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    if jwt is None:
+        raise RuntimeError("PyJWT required. Run: pip install pyjwt")
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=JWT_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def verify_token(token: str) -> Dict[str, Any]:
+    if jwt is None:
+        raise RuntimeError("PyJWT required. Run: pip install pyjwt")
+    try:
+        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise AuthError("Token has expired")
+    except jwt.InvalidTokenError:
+        raise AuthError("Invalid token")
+
+
+async def get_current_user(credentials=None):
+    if credentials is None:
+        raise AuthError("Authorization header missing")
+    if credentials.scheme.lower() != "bearer":
+        raise AuthError("Invalid authentication scheme")
+    return verify_token(credentials.credentials)
+
+
+def require_ws_auth(websocket: WebSocket) -> Dict[str, Any]:
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise AuthError("WebSocket token missing")
+    return verify_token(token)
+'''
+
+
+# =============================================================================
+# 2. SERVER.PY — Full API with auth
+# =============================================================================
+SERVER_PY = '''"""TradingAI API Server — Full Authentication + WebSocket Scanner."""
+from __future__ import annotations
+import asyncio
+import json
+import logging
+import os
+import secrets
+from typing import Any, Dict, Optional
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+
+from core.api.auth import create_access_token, verify_token, get_current_user, require_ws_auth, AuthError
+from core.brain.trading_brain import TradingBrain
+
+logger = logging.getLogger(__name__)
+security = HTTPBearer(auto_error=False)
+
+app = FastAPI(title="TradingAI API", version="1.0.0")
+
+# TradingBrain init
+brain = TradingBrain(
+    mcp_endpoint=os.getenv("MCP_BASE_URL"),
+    mcp_api_key=os.getenv("MCP_API_KEY"),
+)
+try:
+    brain.initialize()
+except Exception as e:
+    logger.warning("TradingBrain init warning: %s", e)
+
+# Users
+USERS_DB = {
+    "admin": {"password": "admin123", "role": "admin", "disabled": False},
+    "trader": {"password": "trader123", "role": "trader", "disabled": False},
+    "viewer": {"password": "viewer123", "role": "viewer", "disabled": False},
+}
+
+# Models
+class TokenRequest(BaseModel):
+    username: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    role: str
+
+class TokenVerifyResponse(BaseModel):
+    valid: bool
+    sub: Optional[str] = None
+    role: Optional[str] = None
+
+class RoleRequired:
+    def __init__(self, *allowed_roles: str):
+        self.allowed_roles = set(allowed_roles)
+    def __call__(self, credentials=Depends(security)):
+        if credentials is None:
+            raise AuthError("Authorization header missing")
+        payload = verify_token(credentials.credentials)
+        user_role = payload.get("role", "viewer")
+        if user_role not in self.allowed_roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Role '{user_role}' not authorized")
+        return payload
+
+# Endpoints
+@app.get("/health", tags=["System"])
+async def health():
+    return JSONResponse({"status": "ok", "ready": getattr(brain, "ready", False)})
+
+@app.post("/token", response_model=TokenResponse, tags=["Authentication"])
+async def generate_dev_token():
+    token = create_access_token({"sub": "dev_user", "role": "admin", "jti": secrets.token_urlsafe(16)})
+    return TokenResponse(access_token=token, token_type="bearer", expires_in=3600, role="admin")
+
+@app.post("/login", response_model=TokenResponse, tags=["Authentication"])
+async def login(request: TokenRequest):
+    user = USERS_DB.get(request.username)
+    if not user or user.get("disabled") or request.password != user["password"]:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+    token = create_access_token({"sub": request.username, "role": user["role"], "jti": secrets.token_urlsafe(16)})
+    return TokenResponse(access_token=token, token_type="bearer", expires_in=3600, role=user["role"])
+
+@app.post("/token/refresh", response_model=TokenResponse, tags=["Authentication"])
+async def refresh_token(credentials=Depends(security)):
+    payload = verify_token(credentials.credentials)
+    new_token = create_access_token({"sub": payload["sub"], "role": payload.get("role", "viewer")})
+    return TokenResponse(access_token=new_token, token_type="bearer", expires_in=3600, role=payload.get("role", "viewer"))
+
+@app.get("/token/verify", response_model=TokenVerifyResponse, tags=["Authentication"])
+async def verify_token_endpoint(credentials=Depends(security)):
+    try:
+        payload = verify_token(credentials.credentials)
+        return TokenVerifyResponse(valid=True, sub=payload.get("sub"), role=payload.get("role"), exp=payload.get("exp"))
+    except AuthError:
+        return TokenVerifyResponse(valid=False)
+
+@app.get("/me", tags=["Authentication"])
+async def get_current_user_info(user=Depends(RoleRequired("viewer", "trader", "admin"))):
+    return {"username": user.get("sub"), "role": user.get("role"), "authenticated": True}
+
+@app.get("/protected", tags=["Protected"])
+async def protected_any(user=Depends(RoleRequired("viewer", "trader", "admin"))):
+    return {"authenticated": True, "user": user.get("sub"), "role": user.get("role")}
+
+@app.get("/protected/trader", tags=["Protected"])
+async def protected_trader(user=Depends(RoleRequired("trader", "admin"))):
+    return {"access": "trader_zone", "user": user.get("sub")}
+
+@app.get("/protected/admin", tags=["Protected"])
+async def protected_admin(user=Depends(RoleRequired("admin"))):
+    return {"access": "admin_zone", "user": user.get("sub")}
+
+@app.get("/brain/status", tags=["Brain"])
+async def brain_status(user=Depends(RoleRequired("viewer", "trader", "admin"))):
+    return JSONResponse({
+        "mcp_configured": getattr(brain, "market_builder", None) is not None,
+        "risk_configured": getattr(brain, "risk_validator", None) is not None,
+        "meta_labeler_loaded": getattr(brain, "meta_labeler", None) is not None,
+        "user": user.get("sub"),
+        "role": user.get("role"),
+    })
+
+@app.websocket("/ws/scanner")
+async def websocket_scanner(ws: WebSocket):
+    await ws.accept()
+    try:
+        user = require_ws_auth(ws)
+    except AuthError as e:
+        await ws.send_text(json.dumps({"error": f"Auth failed: {e.detail}"}))
+        await ws.close(code=4001)
+        return
+    user_role = user.get("role", "viewer")
+    if user_role not in ("trader", "admin"):
+        await ws.send_text(json.dumps({"error": "Insufficient permissions"}))
+        await ws.close(code=4003)
+        return
+    try:
+        while True:
+            data = await ws.receive_text()
+            try:
+                payload = json.loads(data)
+            except json.JSONDecodeError:
+                await ws.send_text(json.dumps({"error": "Invalid JSON"}))
+                continue
+            action = payload.get("action")
+            if action == "scan":
+                symbols = payload.get("symbols", [])
+                timeframe = payload.get("timeframe", "30m")
+                owner_id = payload.get("owner_id", user.get("sub", "ws_client"))
+                if not symbols or not isinstance(symbols, list):
+                    await ws.send_text(json.dumps({"error": "symbols must be non-empty list"}))
+                    continue
+                if not getattr(brain, "market_builder", None):
+                    await ws.send_text(json.dumps({"error": "MCP MarketContextBuilder not configured"}))
+                    continue
+                try:
+                    recs = await brain.scan_symbols(symbols, timeframe=timeframe, owner_id=owner_id)
+                    for rec in recs:
+                        await ws.send_text(json.dumps({"type": "recommendation", "data": rec}, default=str))
+                    await ws.send_text(json.dumps({"type": "complete", "count": len(recs)}))
+                except Exception as e:
+                    logger.exception("Scan failed")
+                    await ws.send_text(json.dumps({"error": f"Scan failed: {e}"}))
+            else:
+                await ws.send_text(json.dumps({"error": "Unsupported action"}))
+    except WebSocketDisconnect:
+        logger.info("WS client disconnected")
+    except Exception as e:
+        logger.exception("WS error")
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+'''
+
+
+def main():
+    print("=" * 60)
+    print("TradingAI Server Fix & Start")
+    print("=" * 60)
+
+    # 1. Stop Python
+    print("\n[1/6] Stopping Python processes...")
+    try:
+        result = subprocess.run(["taskkill", "/F", "/IM", "python.exe"], capture_output=True, text=True)
+        print(f"  {result.stdout.strip()}")
+    except Exception as e:
+        print(f"  (No Python processes or error: {e})")
+
+    # 2. Ensure directories
+    print("\n[2/6] Ensuring directories...")
+    os.makedirs(API_DIR, exist_ok=True)
+    print(f"  {API_DIR}")
+
+    # 3. Backup old server
+    print("\n[3/6] Backing up old server.py...")
+    if os.path.exists(SERVER_FILE):
+        shutil.copy2(SERVER_FILE, BACKUP_FILE)
+        print(f"  Backed up to {BACKUP_FILE}")
+
+    # 4. Write auth.py
+    print("\n[4/6] Writing auth.py...")
+    with open(AUTH_FILE, "w", encoding="utf-8") as f:
+        f.write(AUTH_PY)
+    print(f"  Written: {AUTH_FILE}")
+
+    # 5. Write server.py
+    print("\n[5/6] Writing server.py...")
+    with open(SERVER_FILE, "w", encoding="utf-8") as f:
+        f.write(SERVER_PY)
+    print(f"  Written: {SERVER_FILE}")
+
+    # 6. Start server
+    print("\n[6/6] Starting API server...")
+    env = os.environ.copy()
+    env["JWT_SECRET_KEY"] = "tradingai-production-secret-change-this"
+    env["PYTHONPATH"] = PROJECT_DIR
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "core.api.server:app", "--host", "0.0.0.0", "--port", "8000"],
+        cwd=PROJECT_DIR,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    print("  Server starting... waiting 6 seconds")
+    time.sleep(6)
+
+    # 7. Verify
+    print("\n--- Verification ---")
+    try:
+        import urllib.request
+        req = urllib.request.Request("http://127.0.0.1:8000/health")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            print(f"  GET /health: {resp.read().decode()}")
+    except Exception as e:
+        print(f"  GET /health FAILED: {e}")
+
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8000/token",
+            data=b"",
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            token_data = json.loads(resp.read().decode())
+            token = token_data["access_token"]
+            print(f"  POST /token: OK (role: {token_data['role']})")
+    except Exception as e:
+        print(f"  POST /token FAILED: {e}")
+        token = None
+
+    if token:
+        try:
+            req = urllib.request.Request(
+                "http://127.0.0.1:8000/protected",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                print(f"  GET /protected: {resp.read().decode()}")
+        except Exception as e:
+            print(f"  GET /protected FAILED: {e}")
+
+    print("\n" + "=" * 60)
+    print("Server is running. Press Ctrl+C to stop.")
+    print("=" * 60)
+
+    # Stream logs
+    try:
+        for line in proc.stdout:
+            print(line, end="")
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+        proc.terminate()
+        proc.wait()
+
+
+if __name__ == "__main__":
+    main()
